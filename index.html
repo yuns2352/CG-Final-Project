@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Abyss — DDGI Light Diver</title>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.webgpu.js",
+      "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.webgpu.js",
+      "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.tsl.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #02060a; }
+    canvas { display: block; }
+    #hud { position: fixed; top: 14px; left: 14px; font-family: ui-monospace, Menlo, monospace;
+      font-size: 12px; line-height: 1.6; color: #bfe9ff; text-shadow: 0 1px 3px rgba(0,0,0,0.9);
+      pointer-events: none; user-select: none; }
+    #hud b { color: #fff; }
+    .on { color: #7CFFB2; } .off { color: #ff8a8a; } .key { color: #ffd479; } .num { color: #ffd479; }
+    #objective { position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
+      font-family: ui-sans-serif, system-ui, sans-serif; font-size: 15px; font-weight: 600;
+      color: #eaffff; text-shadow: 0 1px 6px rgba(0,0,0,0.9); pointer-events: none; user-select: none;
+      text-align: center; }
+    #objective small { display:block; font-weight: 400; font-size: 12px; color: #8fd6e6; margin-top: 2px; }
+    #hint { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+      font-family: ui-sans-serif, system-ui, sans-serif; font-size: 13px; color: #cfe9ff;
+      background: rgba(4,12,20,0.55); padding: 8px 16px; border-radius: 999px;
+      pointer-events: none; user-select: none; backdrop-filter: blur(4px); }
+    #hint.hidden { display: none; }
+    .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 14px; text-align: center; font-family: ui-sans-serif, system-ui, sans-serif;
+      color: #dff; background: radial-gradient(ellipse at center, #06121d 0%, #02060a 75%); z-index: 10;
+      padding: 24px; }
+    .screen.hidden { display: none; }
+    .screen h1 { font-size: 30px; font-weight: 700; letter-spacing: 1px; color: #aef3ff; }
+    .screen h2 { font-size: 22px; font-weight: 700; color: #7CFFB2; }
+    .screen p { font-size: 14px; color: #9fc4d4; max-width: 460px; line-height: 1.7; }
+    .screen .keys { font-size: 12px; color: #6f93a3; font-family: ui-monospace, Menlo, monospace; }
+    .btn { margin-top: 8px; padding: 12px 28px; font-size: 15px; font-weight: 600; color: #021018;
+      background: linear-gradient(180deg, #7fe6ff, #34c4f0); border: none; border-radius: 999px;
+      cursor: pointer; box-shadow: 0 6px 20px rgba(52,196,240,0.35); }
+    .btn:hover { filter: brightness(1.08); }
+    .spinner { width: 26px; height: 26px; border: 3px solid #16384a; border-top-color: #5fd0ff;
+      border-radius: 50%; animation: spin 0.9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="loading" class="screen">
+    <div class="spinner"></div>
+    <h1 style="font-size:20px">Abyss 로딩 중…</h1>
+  </div>
+
+  <div id="start" class="screen hidden">
+    <h1>ABYSS</h1>
+    <p>당신은 빛이 닿지 않는 심해 동굴의 발광 다이버. <b>당신 자신이 유일한 빛</b>입니다.<br>
+       어둠 속에 잠든 <b>비콘 6개</b>를 찾아 점등하고 동굴을 빠져나가세요.</p>
+    <p style="color:#7fd6c0">먼저 구역 A의 비콘 3개를 밝혀 출입구를 열고, 구역 B로 건너가 나머지를 밝히면 탈출입니다.</p>
+    <div class="keys">WASD 이동 · Space/C 상승·하강 · 마우스 시점</div>
+    <button class="btn" id="startBtn">잠수 시작</button>
+  </div>
+
+  <div id="win" class="screen hidden">
+    <h2>탈출 성공!</h2>
+    <p>모든 비콘을 점등하고 심해를 빠져나왔습니다.</p>
+    <p id="winStats" style="color:#7fd6c0"></p>
+    <button class="btn" onclick="location.reload()">다시 하기</button>
+  </div>
+
+  <div id="hud" style="display:none">
+    <div>ABYSS — <b>DDGI Light Diver</b></div>
+    <div>비콘 A: <span id="bA" class="num">0/3</span> · B: <span id="bB" class="num">0/3</span> · 문: <span id="door" class="off">잠김</span></div>
+    <div style="opacity:0.85">GI:<span id="giState" class="on">ON</span> 가시성:<span id="visState" class="on">ON</span>
+        보정면:<span id="corr" class="num">–</span> 디버그:<span id="dbg">OFF</span> · FPS:<span id="fps">–</span> <span id="backend">–</span></div>
+    <div style="margin-top:4px; opacity:0.7">
+      <span class="key">G</span>GI <span class="key">V</span>가시성 <span class="key">B</span>디버그 <span class="key">P</span>probe <span class="key">H</span>HUD</div>
+  </div>
+
+  <div id="objective" style="display:none"></div>
+  <div id="hint" class="hidden">화면을 클릭해 시점을 활성화하세요</div>
+
+  <script type="module">
+    import * as THREE from 'three/webgpu';
+
+    let renderer, scene, camera, clock, diver, diverLight;
+    const wallMeshes = [], giMeshes = [], giMaterials = [], occluders = [];
+    const correctedMeshes = [];
+    const raycaster = new THREE.Raycaster();
+
+    const ROOM = { w: 36, h: 12, d: 24 };
+    const MARGIN = 1.2, GI_INTENSITY = 1.6, DOOR_HALF = 3.0;
+
+    const PX = [-12, -7, 1.5, 6.5, 12];
+    const PY = [3, 9];
+    const PZ = [-8, -3, 3, 8];
+    const PROBE_RES = 64, UPDATE_NEAR = 4;
+    let rrCursor = 0, probes = [], probeViz, probeViewOn = false;
+
+    // 게임 상태
+    const beacons = [];
+    let litA = 0, litB = 0, barrier, barrierActive = true, barrierOpening = false;
+    let started = false, won = false, startTime = 0;
+    const ACTIVATE_R = 3.6, CHARGE_TIME = 1.2;
+
+    const keys = {};
+    let yaw = 0, pitch = 0.35, pointerLocked = false;
+    let giEnabled = true, visAware = true, dbgOn = false;
+    let fpsAccum = 0, fpsFrames = 0, fpsTimer = 0;
+
+    const $ = (id) => document.getElementById(id);
+
+    async function init() {
+      renderer = new THREE.WebGPURenderer({ antialias: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.setSize(innerWidth, innerHeight);
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.05;
+      await renderer.init();
+      document.body.appendChild(renderer.domElement);
+      $('backend').textContent = renderer.backend?.isWebGPUBackend ? 'WebGPU' : 'WebGL2';
+
+      scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x02060a);
+      scene.fog = new THREE.FogExp2(0x02080e, 0.04);
+      camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 200);
+      camera.position.set(8, 6, 10);
+      clock = new THREE.Clock();
+
+      buildProbeGrid();
+      buildDivider();
+      buildDoorBarrier();
+      buildChamber();
+      buildCoral();
+      buildBeacons();
+      buildDiver();
+      assignAllProbes();
+      buildProbeViz();
+      setupInput();
+      addEventListener('resize', onResize);
+
+      $('probeCount') && ($('probeCount').textContent = probes.length);
+      $('loading').classList.add('hidden');
+      $('start').classList.remove('hidden');
+      renderer.setAnimationLoop(loop);
+    }
+
+    function buildProbeGrid() {
+      probes = [];
+      for (const x of PX) for (const y of PY) for (const z of PZ) {
+        const pos = new THREE.Vector3(x, y, z);
+        const rt = new THREE.WebGLCubeRenderTarget(PROBE_RES, { type: THREE.HalfFloatType });
+        const cam = new THREE.CubeCamera(0.3, 60, rt);
+        cam.position.copy(pos); scene.add(cam);
+        probes.push({ pos, rt, cam });
+      }
+    }
+
+    function buildDivider() {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x10171f, roughness: 1.0, side: THREE.DoubleSide });
+      [[-9, 12], [9, 12]].forEach(([zc, w]) => {
+        const seg = new THREE.Mesh(new THREE.PlaneGeometry(w, ROOM.h), mat);
+        seg.position.set(0, ROOM.h/2, zc); seg.rotation.y = Math.PI/2; seg.updateMatrixWorld(true);
+        scene.add(seg); wallMeshes.push(seg); occluders.push(seg);
+      });
+      const frameMat = new THREE.MeshStandardMaterial({ color: 0x0a1a22,
+        emissive: new THREE.Color(0x1f7a8c), emissiveIntensity: 0.7, roughness: 0.6 });
+      [-DOOR_HALF, DOOR_HALF].forEach((z) => {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.25, ROOM.h, 0.25), frameMat);
+        post.position.set(0, ROOM.h/2, z); scene.add(post);
+      });
+    }
+
+    // 출입구 에너지막: 구역 A 비콘 3개 점등 전까지 통행 차단
+    function buildDoorBarrier() {
+      barrier = new THREE.Mesh(new THREE.PlaneGeometry(2 * DOOR_HALF, ROOM.h),
+        new THREE.MeshStandardMaterial({ color: 0x0a3a4a, emissive: new THREE.Color(0x35e0ff),
+          emissiveIntensity: 0.9, transparent: true, opacity: 0.38, side: THREE.DoubleSide, depthWrite: false }));
+      barrier.position.set(0, ROOM.h/2, 0); barrier.rotation.y = Math.PI/2;
+      scene.add(barrier);
+    }
+
+    function buildChamber() {
+      const half = { w: ROOM.w/2, h: ROOM.h/2, d: ROOM.d/2 };
+      const base = { color: 0x2a3a4d, roughness: 0.92 };
+      tiled(ROOM.w, ROOM.d, 8, 5, [0,0,0],          [-Math.PI/2,0,0], base);
+      tiled(ROOM.w, ROOM.d, 6, 4, [0,ROOM.h,0],      [ Math.PI/2,0,0], base);
+      tiled(ROOM.w, ROOM.h, 8, 3, [0,half.h,-half.d],[0,0,0], base);
+      tiled(ROOM.w, ROOM.h, 8, 3, [0,half.h, half.d],[0,Math.PI,0], base);
+      tiled(ROOM.d, ROOM.h, 5, 3, [-half.w,half.h,0],[0, Math.PI/2,0], base);
+      tiled(ROOM.d, ROOM.h, 5, 3, [ half.w,half.h,0],[0,-Math.PI/2,0], base);
+      for (let i = 0; i < 8; i++) {
+        const r = 0.8 + Math.random()*1.4;
+        const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), giMat(0x2f4154, 1.0));
+        rock.position.set((Math.random()-0.5)*(ROOM.w-6), r*0.45, (Math.random()-0.5)*(ROOM.d-6));
+        rock.rotation.set(Math.random(), Math.random(), Math.random());
+        scene.add(rock); giMeshes.push(rock); wallMeshes.push(rock);
+      }
+    }
+    function giMat(color, rough) {
+      const m = new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: 0.0, envMapIntensity: GI_INTENSITY });
+      giMaterials.push(m); return m;
+    }
+    function tiled(W, H, sw, sh, pos, rot, base) {
+      const g = new THREE.Group(); g.position.set(...pos); g.rotation.set(...rot);
+      const tw = W/sw, th = H/sh, geo = new THREE.PlaneGeometry(tw, th);
+      for (let i = 0; i < sw; i++) for (let j = 0; j < sh; j++) {
+        const tile = new THREE.Mesh(geo, giMat(base.color, base.roughness));
+        tile.position.set(-W/2 + (i+0.5)*tw, -H/2 + (j+0.5)*th, 0);
+        g.add(tile); giMeshes.push(tile); wallMeshes.push(tile);
+      }
+      scene.add(g); g.updateMatrixWorld(true);
+    }
+
+    function buildCoral() {
+      const palette = [0xff2d75, 0xff7a18, 0x18e0ff, 0xb14bff, 0x39ff88];
+      for (let i = 0; i < 12; i++) {
+        const color = palette[i % palette.length];
+        const geo = Math.random() > 0.5
+          ? new THREE.IcosahedronGeometry(0.55 + Math.random()*0.6, 0)
+          : new THREE.ConeGeometry(0.4, 1.5 + Math.random()*1.2, 6);
+        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+          color: 0x0a0a0a, emissive: new THREE.Color(color), emissiveIntensity: 2.2,
+          roughness: 0.5 }));
+        const side = Math.random() > 0.45 ? 1 : -1;
+        m.position.set(side * (3 + Math.random()*(ROOM.w/2 - 4)),
+          0.7 + Math.random()*(ROOM.h-3), (Math.random()-0.5)*(ROOM.d-3));
+        scene.add(m);
+      }
+    }
+
+    // 비콘 6개 (A:x>0 3개, B:x<0 3개)
+    function buildBeacons() {
+      const spots = [
+        { x: 12, z: -7, r: 'A' }, { x: 7, z: 6, r: 'A' }, { x: 14, z: 4, r: 'A' },
+        { x: -12, z: 7, r: 'B' }, { x: -7, z: -6, r: 'B' }, { x: -14, z: -3, r: 'B' },
+      ];
+      spots.forEach((s) => {
+        const grp = new THREE.Group();
+        grp.position.set(s.x, 1.4, s.z);
+        const mat = new THREE.MeshStandardMaterial({ color: 0x141008,
+          emissive: new THREE.Color(0xffb347), emissiveIntensity: 0.18, roughness: 0.35, metalness: 0.1 });
+        const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), mat);
+        crystal.scale.y = 1.7; grp.add(crystal);
+        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 0.4, 6),
+          new THREE.MeshStandardMaterial({ color: 0x1a1c22, roughness: 0.8 }));
+        base.position.y = -1.3; grp.add(base);
+        const light = new THREE.PointLight(0xffc266, 0, 16, 1.5); grp.add(light);
+        scene.add(grp);
+        beacons.push({ grp, mat, light, region: s.r, charge: 0, lit: false,
+          pos: new THREE.Vector3(s.x, 1.4, s.z) });
+      });
+    }
+
+    function buildDiver() {
+      diver = new THREE.Group(); diver.position.set(6, 4, 1);
+      diver.add(new THREE.Mesh(new THREE.SphereGeometry(0.55, 24, 16),
+        new THREE.MeshStandardMaterial({ color: 0x0b1a22, emissive: new THREE.Color(0x6fe9ff),
+          emissiveIntensity: 1.6, roughness: 0.4, metalness: 0.2 })));
+      diver.add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12),
+        new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(0xaffaff),
+          emissiveIntensity: 3.2 })));
+      const fin = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.0, 4),
+        new THREE.MeshStandardMaterial({ color: 0x12303d, emissive: new THREE.Color(0x2aa6c4),
+          emissiveIntensity: 0.8, roughness: 0.6 }));
+      fin.rotation.x = Math.PI/2; fin.position.z = -0.7; diver.add(fin);
+      diverLight = new THREE.PointLight(0x9fe9ff, 40, 28, 1.6); diver.add(diverLight);
+      scene.add(diver);
+    }
+
+    function assignAllProbes() {
+      const wp = new THREE.Vector3(); let corrected = 0;
+      giMeshes.forEach((mesh) => {
+        mesh.getWorldPosition(wp);
+        const ordered = probes.map((p) => ({ p, d: p.pos.distanceToSquared(wp) })).sort((a, b) => a.d - b.d);
+        const naive = ordered[0].p; let visible = naive;
+        for (const { p } of ordered) { if (los(wp, p.pos, mesh)) { visible = p; break; } }
+        mesh.userData.naiveTex = naive.rt.texture;
+        mesh.userData.visTex = visible.rt.texture;
+        if (naive !== visible) { corrected++; correctedMeshes.push(mesh); }
+        mesh.material.envMap = visAware ? visible.rt.texture : naive.rt.texture;
+      });
+      $('corr').textContent = corrected;
+    }
+    function los(from, to, selfMesh) {
+      const dir = new THREE.Vector3().subVectors(to, from);
+      const dist = dir.length(); dir.normalize();
+      raycaster.set(from.clone().addScaledVector(dir, 0.15), dir); raycaster.far = dist - 0.15;
+      return raycaster.intersectObjects(occluders.filter((o) => o !== selfMesh), false).length === 0;
+    }
+
+    function buildProbeViz() {
+      probeViz = new THREE.Group(); probeViz.visible = false;
+      const geo = new THREE.SphereGeometry(0.22, 16, 12);
+      probes.forEach((pr) => {
+        const s = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+          metalness: 1.0, roughness: 0.08, envMap: pr.rt.texture }));
+        s.position.copy(pr.pos); probeViz.add(s);
+      });
+      scene.add(probeViz);
+    }
+
+    function updateProbes(diverPos) {
+      probeViz.visible = false;
+      const order = probes.map((p, i) => ({ i, d: p.pos.distanceToSquared(diverPos) })).sort((a, b) => a.d - b.d);
+      const set = new Set();
+      for (let k = 0; k < Math.min(UPDATE_NEAR, order.length); k++) set.add(order[k].i);
+      set.add(rrCursor % probes.length); rrCursor++;
+      set.forEach((i) => probes[i].cam.update(renderer, scene));
+      probeViz.visible = probeViewOn;
+    }
+
+    // 비콘 점등 + 진행
+    function updateBeacons(dt) {
+      beacons.forEach((b) => {
+        if (b.lit) return;
+        const d = diver.position.distanceTo(b.pos);
+        if (d < ACTIVATE_R) {
+          b.charge += dt / CHARGE_TIME;
+          b.mat.emissiveIntensity = 0.18 + b.charge * 3.4;
+          b.grp.children[0].rotation.y += dt * 2;
+          if (b.charge >= 1) lightBeacon(b);
+        } else if (b.charge > 0) {
+          b.charge = Math.max(0, b.charge - dt * 0.6);
+          b.mat.emissiveIntensity = 0.18 + b.charge * 3.4;
+        }
+      });
+      if (barrierOpening && barrier.visible) {
+        barrier.material.opacity -= dt * 0.6;
+        if (barrier.material.opacity <= 0) { barrier.visible = false; barrierOpening = false; }
+      }
+      updateObjective();
+    }
+    function lightBeacon(b) {
+      b.lit = true; b.charge = 1;
+      b.mat.emissiveIntensity = 3.6; b.light.intensity = 26;
+      if (b.region === 'A') { litA++; $('bA').textContent = litA + '/3'; }
+      else { litB++; $('bB').textContent = litB + '/3'; }
+      if (litA >= 3 && barrierActive) {       // 문 개방
+        barrierActive = false; barrierOpening = true;
+        $('door').textContent = '열림'; $('door').className = 'on';
+      }
+      if (litA >= 3 && litB >= 3) winGame();
+    }
+    function updateObjective() {
+      const el = $('objective');
+      if (won) return;
+      if (barrierActive) el.innerHTML = `구역 A의 비콘을 밝혀 문을 여세요 <small>점등 ${litA}/3 · 어둠 속에서 빛으로 비콘을 찾으세요</small>`;
+      else if (litB < 3) el.innerHTML = `구역 B로 건너가 나머지 비콘을 밝히세요 <small>점등 ${litB}/3</small>`;
+    }
+    function winGame() {
+      won = true;
+      const t = ((performance.now() - startTime) / 1000).toFixed(1);
+      $('winStats').textContent = `클리어 시간: ${t}초`;
+      $('objective').style.display = 'none';
+      document.exitPointerLock?.();
+      $('win').classList.remove('hidden');
+    }
+
+    function setupInput() {
+      $('startBtn').addEventListener('click', () => {
+        $('start').classList.add('hidden');
+        $('hud').style.display = 'block';
+        $('objective').style.display = 'block';
+        started = true; startTime = performance.now();
+        renderer.domElement.requestPointerLock();
+      });
+      addEventListener('keydown', (e) => {
+        keys[e.code] = true;
+        if (e.code === 'KeyG') toggleGI();
+        if (e.code === 'KeyV') toggleVis();
+        if (e.code === 'KeyB') toggleDbg();
+        if (e.code === 'KeyP') toggleProbe();
+        if (e.code === 'KeyH') $('hud').style.display = ($('hud').style.display === 'none') ? 'block' : 'none';
+      });
+      addEventListener('keyup', (e) => { keys[e.code] = false; });
+      const c = renderer.domElement;
+      c.addEventListener('click', () => { if (started && !won) c.requestPointerLock(); });
+      document.addEventListener('pointerlockchange', () => {
+        pointerLocked = (document.pointerLockElement === c);
+        $('hint').classList.toggle('hidden', pointerLocked || !started);
+      });
+      document.addEventListener('mousemove', (e) => {
+        if (!pointerLocked) return;
+        yaw -= e.movementX * 0.0025;
+        pitch = Math.max(-0.2, Math.min(1.25, pitch - e.movementY * 0.0025));
+      });
+    }
+    function toggleGI() { giEnabled = !giEnabled;
+      giMaterials.forEach((m) => { m.envMapIntensity = giEnabled ? GI_INTENSITY : 0; }); badge('giState', giEnabled); }
+    function toggleVis() { visAware = !visAware;
+      giMeshes.forEach((m) => { m.material.envMap = visAware ? m.userData.visTex : m.userData.naiveTex; }); badge('visState', visAware); }
+    function toggleDbg() { dbgOn = !dbgOn;
+      correctedMeshes.forEach((m) => m.material.emissive.setHex(dbgOn ? 0xff2200 : 0x000000)); $('dbg').textContent = dbgOn ? 'ON' : 'OFF'; }
+    function toggleProbe() { probeViewOn = !probeViewOn; probeViz.visible = probeViewOn; $('probeView') && ($('probeView').textContent = probeViewOn ? 'ON' : 'OFF'); }
+    function badge(id, on) { const el = $(id); el.textContent = on ? 'ON' : 'OFF'; el.className = on ? 'on' : 'off'; }
+
+    function update(dt) {
+      if (!started || won) return;
+      const prevX = diver.position.x;
+      const speed = (keys['ShiftLeft'] || keys['ShiftRight']) ? 9 : 6;
+      const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+      const rgt = new THREE.Vector3(Math.cos(yaw), 0, -Math.sin(yaw));
+      const mv = new THREE.Vector3();
+      if (keys['KeyW']) mv.add(fwd);
+      if (keys['KeyS']) mv.sub(fwd);
+      if (keys['KeyD']) mv.add(rgt);
+      if (keys['KeyA']) mv.sub(rgt);
+      if (keys['Space']) mv.y += 1;
+      if (keys['ControlLeft'] || keys['KeyC']) mv.y -= 1;
+      if (mv.lengthSq() > 0) { mv.normalize().multiplyScalar(speed*dt); diver.position.add(mv); }
+
+      const h = { w: ROOM.w/2 - MARGIN, d: ROOM.d/2 - MARGIN };
+      diver.position.x = THREE.MathUtils.clamp(diver.position.x, -h.w, h.w);
+      diver.position.z = THREE.MathUtils.clamp(diver.position.z, -h.d, h.d);
+      diver.position.y = THREE.MathUtils.clamp(diver.position.y, 1.0, ROOM.h - 1.0);
+      // 칸막이/문 충돌: 문이 잠겨 있으면 출입구도 막힘
+      const blockDoorway = barrierActive;
+      if (Math.abs(diver.position.x) < 0.6 && (Math.abs(diver.position.z) > DOOR_HALF || blockDoorway))
+        diver.position.x = (prevX >= 0 ? 0.6 : -0.6);
+
+      diver.children[0].position.y = Math.sin(performance.now()*0.002) * 0.08;
+      updateBeacons(dt);
+      updateCamera(dt);
+    }
+    function updateCamera(dt) {
+      const target = diver.position.clone().add(new THREE.Vector3(0, 0.6, 0));
+      const dist = 7;
+      const dir = new THREE.Vector3(Math.sin(yaw)*Math.cos(pitch), Math.sin(pitch), Math.cos(yaw)*Math.cos(pitch));
+      let desired = target.clone().add(dir.clone().multiplyScalar(dist));
+      raycaster.set(target, dir); raycaster.far = dist;
+      const hits = raycaster.intersectObjects(wallMeshes, false);
+      if (hits.length > 0) desired = target.clone().add(dir.clone().multiplyScalar(Math.max(1.2, hits[0].distance - 0.4)));
+      camera.position.lerp(desired, 1 - Math.pow(0.0015, dt));
+      camera.lookAt(target);
+    }
+
+    function loop() {
+      const dt = Math.min(clock.getDelta(), 0.05);
+      update(dt);
+      if (giEnabled) updateProbes(diver.position);
+      renderer.render(scene, camera);
+      fps(dt);
+    }
+    function fps(dt) {
+      fpsAccum += dt; fpsFrames++; fpsTimer += dt;
+      if (fpsTimer >= 0.5) { $('fps').textContent = Math.round(fpsFrames/fpsAccum); fpsAccum = 0; fpsFrames = 0; fpsTimer = 0; }
+    }
+    function onResize() { camera.aspect = innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth, innerHeight); }
+
+    init().catch((err) => {
+      console.error(err);
+      $('loading').classList.remove('hidden');
+      $('loading').innerHTML = '<h1 style="font-size:20px">초기화 실패</h1><p>콘솔(F12) 메시지를 알려주세요.<br><br>' +
+        '<code style="color:#ff9a9a">' + (err?.message || err) + '</code></p>';
+    });
+  </script>
+</body>
+</html>
