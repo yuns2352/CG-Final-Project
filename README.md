@@ -50,7 +50,7 @@ flowchart LR
 ## 파일 구성
 
 ```
-abyss/
+CG-Final-Project/
 ├─ index.html      # 게임 본체 (단일 파일)
 ├─ report.md       # 과제 리포트 (구현 상세 + 강의 매핑 + 다이어그램)
 ├─ README.md       # 이 문서
