@@ -37,8 +37,7 @@
     #hint.hidden { display: none; }
     .screen { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
       flex-direction: column; gap: 14px; text-align: center; font-family: ui-sans-serif, system-ui, sans-serif;
-      color: #dff; background: radial-gradient(ellipse at center, #06121d 0%, #02060a 75%); z-index: 10;
-      padding: 24px; }
+      color: #dff; background: radial-gradient(ellipse at center, #06121d 0%, #02060a 75%); z-index: 10; padding: 24px; }
     .screen.hidden { display: none; }
     .screen h1 { font-size: 30px; font-weight: 700; letter-spacing: 1px; color: #aef3ff; }
     .screen h2 { font-size: 22px; font-weight: 700; color: #7CFFB2; }
@@ -78,10 +77,10 @@
   <div id="hud" style="display:none">
     <div>ABYSS — <b>DDGI Light Diver</b></div>
     <div>비콘 A: <span id="bA" class="num">0/3</span> · B: <span id="bB" class="num">0/3</span> · 문: <span id="door" class="off">잠김</span></div>
-    <div style="opacity:0.85">GI:<span id="giState" class="on">ON</span> 가시성:<span id="visState" class="on">ON</span>
-        보정면:<span id="corr" class="num">–</span> 디버그:<span id="dbg">OFF</span> · FPS:<span id="fps">–</span> <span id="backend">–</span></div>
+    <div style="opacity:0.85">GI: <span id="giState" class="on">ON</span> · Probe뷰: <span id="probeView">OFF</span>
+        · FPS: <span id="fps">–</span> · <span id="backend">–</span></div>
     <div style="margin-top:4px; opacity:0.7">
-      <span class="key">G</span>GI <span class="key">V</span>가시성 <span class="key">B</span>디버그 <span class="key">P</span>probe <span class="key">H</span>HUD</div>
+      <span class="key">G</span> GI on/off · <span class="key">P</span> probe 시각화 · <span class="key">H</span> HUD</div>
   </div>
 
   <div id="objective" style="display:none"></div>
@@ -91,20 +90,18 @@
     import * as THREE from 'three/webgpu';
 
     let renderer, scene, camera, clock, diver, diverLight;
-    const wallMeshes = [], giMeshes = [], giMaterials = [], occluders = [];
-    const correctedMeshes = [];
+    const wallMeshes = [], giMeshes = [], giMaterials = [];
     const raycaster = new THREE.Raycaster();
 
     const ROOM = { w: 36, h: 12, d: 24 };
     const MARGIN = 1.2, GI_INTENSITY = 1.6, DOOR_HALF = 3.0;
 
-    const PX = [-12, -7, 1.5, 6.5, 12];
+    const PX = [-13, -7, -2, 2, 7, 13];   // 두 구역에 고른 분포
     const PY = [3, 9];
     const PZ = [-8, -3, 3, 8];
     const PROBE_RES = 48, UPDATE_NEAR = 4;
     let rrCursor = 0, probes = [], probeViz, probeViewOn = false, frameCount = 0;
 
-    // 게임 상태
     const beacons = [];
     let litA = 0, litB = 0, barrier, barrierActive = true, barrierOpening = false;
     let started = false, won = false, startTime = 0;
@@ -112,7 +109,7 @@
 
     const keys = {};
     let yaw = 0, pitch = 0.35, pointerLocked = false;
-    let giEnabled = true, visAware = true, dbgOn = false;
+    let giEnabled = true;
     let fpsAccum = 0, fpsFrames = 0, fpsTimer = 0;
 
     const $ = (id) => document.getElementById(id);
@@ -147,7 +144,6 @@
       setupInput();
       addEventListener('resize', onResize);
 
-      $('probeCount') && ($('probeCount').textContent = probes.length);
       $('loading').classList.add('hidden');
       $('start').classList.remove('hidden');
       renderer.setAnimationLoop(loop);
@@ -164,12 +160,13 @@
       }
     }
 
+    // 칸막이: 두 구역 분리용 벽 (출입구 z∈[-3,3] 개방)
     function buildDivider() {
-      const mat = new THREE.MeshStandardMaterial({ color: 0x10171f, roughness: 1.0, side: THREE.DoubleSide });
+      const mat = new THREE.MeshStandardMaterial({ color: 0x18222e, roughness: 1.0, side: THREE.DoubleSide });
       [[-9, 12], [9, 12]].forEach(([zc, w]) => {
         const seg = new THREE.Mesh(new THREE.PlaneGeometry(w, ROOM.h), mat);
-        seg.position.set(0, ROOM.h/2, zc); seg.rotation.y = Math.PI/2; seg.updateMatrixWorld(true);
-        scene.add(seg); wallMeshes.push(seg); occluders.push(seg);
+        seg.position.set(0, ROOM.h/2, zc); seg.rotation.y = Math.PI/2;
+        scene.add(seg); wallMeshes.push(seg);
       });
       const frameMat = new THREE.MeshStandardMaterial({ color: 0x0a1a22,
         emissive: new THREE.Color(0x1f7a8c), emissiveIntensity: 0.7, roughness: 0.6 });
@@ -220,32 +217,30 @@
       scene.add(g); g.updateMatrixWorld(true);
     }
 
+    // 발광 산호: 양쪽 구역에 자연스럽게 배치 (간접광/color bleeding의 소스)
     function buildCoral() {
       const palette = [0xff2d75, 0xff7a18, 0x18e0ff, 0xb14bff, 0x39ff88];
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < 16; i++) {
         const color = palette[i % palette.length];
         const geo = Math.random() > 0.5
           ? new THREE.IcosahedronGeometry(0.55 + Math.random()*0.6, 0)
           : new THREE.ConeGeometry(0.4, 1.5 + Math.random()*1.2, 6);
         const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-          color: 0x0a0a0a, emissive: new THREE.Color(color), emissiveIntensity: 2.2,
-          roughness: 0.5 }));
-        const side = Math.random() > 0.45 ? 1 : -1;
+          color: 0x0a0a0a, emissive: new THREE.Color(color), emissiveIntensity: 2.4, roughness: 0.5 }));
+        const side = Math.random() > 0.5 ? 1 : -1;
         m.position.set(side * (3 + Math.random()*(ROOM.w/2 - 4)),
           0.7 + Math.random()*(ROOM.h-3), (Math.random()-0.5)*(ROOM.d-3));
         scene.add(m);
       }
     }
 
-    // 비콘 6개 (A:x>0 3개, B:x<0 3개)
     function buildBeacons() {
       const spots = [
         { x: 12, z: -7, r: 'A' }, { x: 7, z: 6, r: 'A' }, { x: 14, z: 4, r: 'A' },
         { x: -12, z: 7, r: 'B' }, { x: -7, z: -6, r: 'B' }, { x: -14, z: -3, r: 'B' },
       ];
       spots.forEach((s) => {
-        const grp = new THREE.Group();
-        grp.position.set(s.x, 1.4, s.z);
+        const grp = new THREE.Group(); grp.position.set(s.x, 1.4, s.z);
         const mat = new THREE.MeshStandardMaterial({ color: 0x141008,
           emissive: new THREE.Color(0xffb347), emissiveIntensity: 0.18, roughness: 0.35, metalness: 0.1 });
         const crystal = new THREE.Mesh(new THREE.OctahedronGeometry(0.7, 0), mat);
@@ -255,8 +250,7 @@
         base.position.y = -1.3; grp.add(base);
         const light = new THREE.PointLight(0xffc266, 0, 16, 1.5); grp.add(light);
         scene.add(grp);
-        beacons.push({ grp, mat, light, region: s.r, charge: 0, lit: false,
-          pos: new THREE.Vector3(s.x, 1.4, s.z) });
+        beacons.push({ grp, mat, light, region: s.r, charge: 0, lit: false, pos: new THREE.Vector3(s.x, 1.4, s.z) });
       });
     }
 
@@ -266,8 +260,7 @@
         new THREE.MeshStandardMaterial({ color: 0x0b1a22, emissive: new THREE.Color(0x6fe9ff),
           emissiveIntensity: 1.6, roughness: 0.4, metalness: 0.2 })));
       diver.add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 12),
-        new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(0xaffaff),
-          emissiveIntensity: 3.2 })));
+        new THREE.MeshStandardMaterial({ color: 0x000000, emissive: new THREE.Color(0xaffaff), emissiveIntensity: 3.2 })));
       const fin = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.0, 4),
         new THREE.MeshStandardMaterial({ color: 0x12303d, emissive: new THREE.Color(0x2aa6c4),
           emissiveIntensity: 0.8, roughness: 0.6 }));
@@ -276,33 +269,22 @@
       scene.add(diver);
     }
 
+    // 가장 가까운 probe를 표면에 할당
     function assignAllProbes() {
-      const wp = new THREE.Vector3(); let corrected = 0;
+      const wp = new THREE.Vector3();
       giMeshes.forEach((mesh) => {
         mesh.getWorldPosition(wp);
-        const ordered = probes.map((p) => ({ p, d: p.pos.distanceToSquared(wp) })).sort((a, b) => a.d - b.d);
-        const naive = ordered[0].p; let visible = naive;
-        for (const { p } of ordered) { if (los(wp, p.pos, mesh)) { visible = p; break; } }
-        mesh.userData.naiveTex = naive.rt.texture;
-        mesh.userData.visTex = visible.rt.texture;
-        if (naive !== visible) { corrected++; correctedMeshes.push(mesh); }
-        mesh.material.envMap = visAware ? visible.rt.texture : naive.rt.texture;
+        let best = probes[0], bestD = Infinity;
+        for (const p of probes) { const d = p.pos.distanceToSquared(wp); if (d < bestD) { bestD = d; best = p; } }
+        mesh.material.envMap = best.rt.texture;
       });
-      $('corr').textContent = corrected;
-    }
-    function los(from, to, selfMesh) {
-      const dir = new THREE.Vector3().subVectors(to, from);
-      const dist = dir.length(); dir.normalize();
-      raycaster.set(from.clone().addScaledVector(dir, 0.15), dir); raycaster.far = dist - 0.15;
-      return raycaster.intersectObjects(occluders.filter((o) => o !== selfMesh), false).length === 0;
     }
 
     function buildProbeViz() {
       probeViz = new THREE.Group(); probeViz.visible = false;
       const geo = new THREE.SphereGeometry(0.22, 16, 12);
       probes.forEach((pr) => {
-        const s = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
-          metalness: 1.0, roughness: 0.08, envMap: pr.rt.texture }));
+        const s = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ metalness: 1.0, roughness: 0.08, envMap: pr.rt.texture }));
         s.position.copy(pr.pos); probeViz.add(s);
       });
       scene.add(probeViz);
@@ -323,7 +305,6 @@
       probeViz.visible = probeViewOn;
     }
 
-    // 비콘 점등 + 진행
     function updateBeacons(dt) {
       beacons.forEach((b) => {
         if (b.lit) return;
@@ -345,19 +326,15 @@
       updateObjective();
     }
     function lightBeacon(b) {
-      b.lit = true; b.charge = 1;
-      b.mat.emissiveIntensity = 3.6; b.light.intensity = 26;
+      b.lit = true; b.charge = 1; b.mat.emissiveIntensity = 3.6; b.light.intensity = 26;
       if (b.region === 'A') { litA++; $('bA').textContent = litA + '/3'; }
       else { litB++; $('bB').textContent = litB + '/3'; }
-      if (litA >= 3 && barrierActive) {       // 문 개방
-        barrierActive = false; barrierOpening = true;
-        $('door').textContent = '열림'; $('door').className = 'on';
-      }
+      if (litA >= 3 && barrierActive) { barrierActive = false; barrierOpening = true;
+        $('door').textContent = '열림'; $('door').className = 'on'; }
       if (litA >= 3 && litB >= 3) winGame();
     }
     function updateObjective() {
-      const el = $('objective');
-      if (won) return;
+      const el = $('objective'); if (won) return;
       if (barrierActive) el.innerHTML = `구역 A의 비콘을 밝혀 문을 여세요 <small>점등 ${litA}/3 · 어둠 속에서 빛으로 비콘을 찾으세요</small>`;
       else if (litB < 3) el.innerHTML = `구역 B로 건너가 나머지 비콘을 밝히세요 <small>점등 ${litB}/3</small>`;
     }
@@ -382,8 +359,6 @@
         keys[e.code] = true;
         if (started && ['KeyW','KeyA','KeyS','KeyD','Space','KeyC'].includes(e.code)) e.preventDefault();
         if (e.code === 'KeyG') toggleGI();
-        if (e.code === 'KeyV') toggleVis();
-        if (e.code === 'KeyB') toggleDbg();
         if (e.code === 'KeyP') toggleProbe();
         if (e.code === 'KeyH') $('hud').style.display = ($('hud').style.display === 'none') ? 'block' : 'none';
       });
@@ -401,13 +376,10 @@
       });
     }
     function toggleGI() { giEnabled = !giEnabled;
-      giMaterials.forEach((m) => { m.envMapIntensity = giEnabled ? GI_INTENSITY : 0; }); badge('giState', giEnabled); }
-    function toggleVis() { visAware = !visAware;
-      giMeshes.forEach((m) => { m.material.envMap = visAware ? m.userData.visTex : m.userData.naiveTex; }); badge('visState', visAware); }
-    function toggleDbg() { dbgOn = !dbgOn;
-      correctedMeshes.forEach((m) => m.material.emissive.setHex(dbgOn ? 0xff2200 : 0x000000)); $('dbg').textContent = dbgOn ? 'ON' : 'OFF'; }
-    function toggleProbe() { probeViewOn = !probeViewOn; probeViz.visible = probeViewOn; $('probeView') && ($('probeView').textContent = probeViewOn ? 'ON' : 'OFF'); }
-    function badge(id, on) { const el = $(id); el.textContent = on ? 'ON' : 'OFF'; el.className = on ? 'on' : 'off'; }
+      giMaterials.forEach((m) => { m.envMapIntensity = giEnabled ? GI_INTENSITY : 0; });
+      const el = $('giState'); el.textContent = giEnabled ? 'ON' : 'OFF'; el.className = giEnabled ? 'on' : 'off'; }
+    function toggleProbe() { probeViewOn = !probeViewOn; probeViz.visible = probeViewOn;
+      $('probeView').textContent = probeViewOn ? 'ON' : 'OFF'; }
 
     function update(dt) {
       if (!started || won) return;
@@ -428,9 +400,7 @@
       diver.position.x = THREE.MathUtils.clamp(diver.position.x, -h.w, h.w);
       diver.position.z = THREE.MathUtils.clamp(diver.position.z, -h.d, h.d);
       diver.position.y = THREE.MathUtils.clamp(diver.position.y, 1.0, ROOM.h - 1.0);
-      // 칸막이/문 충돌: 문이 잠겨 있으면 출입구도 막힘
-      const blockDoorway = barrierActive;
-      if (Math.abs(diver.position.x) < 0.6 && (Math.abs(diver.position.z) > DOOR_HALF || blockDoorway))
+      if (Math.abs(diver.position.x) < 0.6 && (Math.abs(diver.position.z) > DOOR_HALF || barrierActive))
         diver.position.x = (prevX >= 0 ? 0.6 : -0.6);
 
       diver.children[0].position.y = Math.sin(performance.now()*0.002) * 0.08;
