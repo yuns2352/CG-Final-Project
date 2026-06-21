@@ -101,8 +101,8 @@
     const PX = [-12, -7, 1.5, 6.5, 12];
     const PY = [3, 9];
     const PZ = [-8, -3, 3, 8];
-    const PROBE_RES = 64, UPDATE_NEAR = 4;
-    let rrCursor = 0, probes = [], probeViz, probeViewOn = false;
+    const PROBE_RES = 48, UPDATE_NEAR = 4;
+    let rrCursor = 0, probes = [], probeViz, probeViewOn = false, frameCount = 0;
 
     // 게임 상태
     const beacons = [];
@@ -143,6 +143,7 @@
       buildDiver();
       assignAllProbes();
       buildProbeViz();
+      warmUpProbes();
       setupInput();
       addEventListener('resize', onResize);
 
@@ -307,6 +308,11 @@
       scene.add(probeViz);
     }
 
+    function warmUpProbes() {
+      probeViz.visible = false;
+      probes.forEach((p) => p.cam.update(renderer, scene));   // 시작 전 모든 probe 1회 채움
+    }
+
     function updateProbes(diverPos) {
       probeViz.visible = false;
       const order = probes.map((p, i) => ({ i, d: p.pos.distanceToSquared(diverPos) })).sort((a, b) => a.d - b.d);
@@ -374,6 +380,7 @@
       });
       addEventListener('keydown', (e) => {
         keys[e.code] = true;
+        if (started && ['KeyW','KeyA','KeyS','KeyD','Space','KeyC'].includes(e.code)) e.preventDefault();
         if (e.code === 'KeyG') toggleGI();
         if (e.code === 'KeyV') toggleVis();
         if (e.code === 'KeyB') toggleDbg();
@@ -414,7 +421,7 @@
       if (keys['KeyD']) mv.add(rgt);
       if (keys['KeyA']) mv.sub(rgt);
       if (keys['Space']) mv.y += 1;
-      if (keys['ControlLeft'] || keys['KeyC']) mv.y -= 1;
+      if (keys['KeyC']) mv.y -= 1;
       if (mv.lengthSq() > 0) { mv.normalize().multiplyScalar(speed*dt); diver.position.add(mv); }
 
       const h = { w: ROOM.w/2 - MARGIN, d: ROOM.d/2 - MARGIN };
@@ -445,7 +452,8 @@
     function loop() {
       const dt = Math.min(clock.getDelta(), 0.05);
       update(dt);
-      if (giEnabled) updateProbes(diver.position);
+      frameCount++;
+      if (giEnabled && frameCount % 2 === 0) updateProbes(diver.position);
       renderer.render(scene, camera);
       fps(dt);
     }
