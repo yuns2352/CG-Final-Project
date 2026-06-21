@@ -11,8 +11,7 @@
 
 컴퓨터 그래픽스 최종 과제 · **Three.js r182 (WebGPU)** 위에 **DDGI(Dynamic Diffuse Global Illumination)** 를 직접 구현.
 
-| | |
-| **플레이** | https://&lt;내아이디&gt;.github.io/abyss/ |
+| **플레이** | https://&lt;yuns2352&gt;.github.io/CG-Final-Project/ |
 | **리포트** | [report.md](./report.md) |
 
 ---
