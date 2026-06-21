@@ -4,7 +4,7 @@
 > 게임 링크: `https://<내아이디>.github.io/abyss/`
 > 기술 스택: **Three.js r182 (WebGPU)** · GI 기법: **DDGI (Dynamic Diffuse Global Illumination)**
 
-> 📷 **제출 전 촬영 체크리스트** (아래 임베드된 이미지는 모두 본인 게임에서 캡처해 `screenshots/`에 넣을 것. `H`로 HUD를 숨기고 촬영):
+> **제출 전 촬영 체크리스트** (아래 임베드된 이미지는 모두 본인 게임에서 캡처해 `screenshots/`에 넣을 것. `H`로 HUD를 숨기고 촬영):
 > `01_title` · `02_overview` · `10_gi_on` / `11_gi_off`(G 토글, 카메라 고정) · `probe_grid`(P)
 > 본인 게임 캡처가 없는 항목은 0점 처리됨. 본 리포트의 다이어그램은 캡처를 **보조**하는 용도다.
 
