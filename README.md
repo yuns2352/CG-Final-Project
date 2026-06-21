@@ -1,4 +1,4 @@
-# 🌊 Abyss — DDGI Light Diver
+# Abyss — DDGI Light Diver
 
 > 빛이 닿지 않는 심해 동굴을 탐험하는 발광 다이버 게임.
 > **당신 자신이 유일한 빛**이며, 움직일 때마다 주변에 빛이 실시간으로 번진다.
@@ -13,12 +13,12 @@
 
 | | |
 |---|---|
-| 🎮 **플레이** | https://&lt;내아이디&gt;.github.io/abyss/ |
-| 📄 **리포트** | [report.md](./report.md) |
+| **플레이** | https://&lt;내아이디&gt;.github.io/abyss/ |
+| **리포트** | [report.md](./report.md) |
 
 ---
 
-## ✨ 특징
+## 특징
 
 - **실시간 전역 조명(DDGI)** — 24개 irradiance probe가 동굴의 빛을 캡처해 간접광·color bleeding을 만든다
 - **플레이어가 곧 광원** — 다이버가 움직이면 probe가 실시간 갱신되어 빛이 따라온다 (DDGI의 "Dynamic")
@@ -26,7 +26,7 @@
 - **완결된 게임 루프** — 시작 → 구역 A 점등 → 출입구 개방 → 구역 B → 클리어
 - **무빌드 단일 파일** — three.js를 CDN으로 로드, `index.html` 하나로 GitHub Pages에 바로 배포
 
-## 🎯 조작
+## 조작
 
 | 키 | 동작 | | 키 | 동작 |
 |---|---|---|---|---|
@@ -34,7 +34,7 @@
 | `Space` / `C` | 상승 / 하강 | | `P` | probe 시각화 |
 | `마우스` | 시점 | | `H` | HUD 숨김 |
 
-## 🧩 구현 하이라이트
+## 구현 하이라이트
 
 ```mermaid
 flowchart LR
@@ -49,7 +49,7 @@ flowchart LR
 - **동적 GI** — 점등된 비콘이 emissive 광원이 되어 GI에 기여, multi-bounce가 emergent하게 발생
 - **성능** — 로딩 중 probe 워밍업 + 가까운 probe 위주의 amortized 갱신
 
-## 📁 파일 구성
+## 파일 구성
 
 ```
 abyss/
@@ -59,7 +59,7 @@ abyss/
 └─ screenshots/    # 리포트용 게임 캡처
 ```
 
-## 🚀 로컬 실행
+## 로컬 실행
 
 ```bash
 # 폴더에서
