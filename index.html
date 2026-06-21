@@ -98,9 +98,10 @@
 
     const PX = [-13, -7, -2, 2, 7, 13];   // 두 구역에 고른 분포
     const PY = [3, 9];
-    const PZ = [-8, -3, 3, 8];
-    const PROBE_RES = 48, UPDATE_NEAR = 4;
+    const PZ = [-6, 6];
+    const PROBE_RES = 32, UPDATE_NEAR = 2;
     let rrCursor = 0, probes = [], probeViz, probeViewOn = false, frameCount = 0;
+    let warmupIndex = 0, warmupDone = false;
 
     const beacons = [];
     let litA = 0, litB = 0, barrier, barrierActive = true, barrierOpening = false;
@@ -140,13 +141,10 @@
       buildDiver();
       assignAllProbes();
       buildProbeViz();
-      warmUpProbes();
       setupInput();
       addEventListener('resize', onResize);
 
-      $('loading').classList.add('hidden');
-      $('start').classList.remove('hidden');
-      renderer.setAnimationLoop(loop);
+      renderer.setAnimationLoop(loop);   // 워밍업이 끝나면 루프에서 시작 화면을 띄움
     }
 
     function buildProbeGrid() {
@@ -188,12 +186,12 @@
     function buildChamber() {
       const half = { w: ROOM.w/2, h: ROOM.h/2, d: ROOM.d/2 };
       const base = { color: 0x2a3a4d, roughness: 0.92 };
-      tiled(ROOM.w, ROOM.d, 8, 5, [0,0,0],          [-Math.PI/2,0,0], base);
-      tiled(ROOM.w, ROOM.d, 6, 4, [0,ROOM.h,0],      [ Math.PI/2,0,0], base);
-      tiled(ROOM.w, ROOM.h, 8, 3, [0,half.h,-half.d],[0,0,0], base);
-      tiled(ROOM.w, ROOM.h, 8, 3, [0,half.h, half.d],[0,Math.PI,0], base);
-      tiled(ROOM.d, ROOM.h, 5, 3, [-half.w,half.h,0],[0, Math.PI/2,0], base);
-      tiled(ROOM.d, ROOM.h, 5, 3, [ half.w,half.h,0],[0,-Math.PI/2,0], base);
+      tiled(ROOM.w, ROOM.d, 5, 3, [0,0,0],          [-Math.PI/2,0,0], base);
+      tiled(ROOM.w, ROOM.d, 3, 2, [0,ROOM.h,0],      [ Math.PI/2,0,0], base);
+      tiled(ROOM.w, ROOM.h, 5, 2, [0,half.h,-half.d],[0,0,0], base);
+      tiled(ROOM.w, ROOM.h, 5, 2, [0,half.h, half.d],[0,Math.PI,0], base);
+      tiled(ROOM.d, ROOM.h, 3, 2, [-half.w,half.h,0],[0, Math.PI/2,0], base);
+      tiled(ROOM.d, ROOM.h, 3, 2, [ half.w,half.h,0],[0,-Math.PI/2,0], base);
       for (let i = 0; i < 8; i++) {
         const r = 0.8 + Math.random()*1.4;
         const rock = new THREE.Mesh(new THREE.DodecahedronGeometry(r, 0), giMat(0x2f4154, 1.0));
@@ -288,11 +286,6 @@
         s.position.copy(pr.pos); probeViz.add(s);
       });
       scene.add(probeViz);
-    }
-
-    function warmUpProbes() {
-      probeViz.visible = false;
-      probes.forEach((p) => p.cam.update(renderer, scene));   // 시작 전 모든 probe 1회 채움
     }
 
     function updateProbes(diverPos) {
@@ -423,7 +416,18 @@
       const dt = Math.min(clock.getDelta(), 0.05);
       update(dt);
       frameCount++;
-      if (giEnabled && frameCount % 2 === 0) updateProbes(diver.position);
+      if (!warmupDone) {
+        // 시작 시 모든 probe를 프레임당 2개씩 나눠 채움 (멈춤 방지)
+        for (let k = 0; k < 2 && warmupIndex < probes.length; k++, warmupIndex++)
+          probes[warmupIndex].cam.update(renderer, scene);
+        if (warmupIndex >= probes.length) {
+          warmupDone = true;
+          $('loading').classList.add('hidden');
+          $('start').classList.remove('hidden');
+        }
+      } else if (giEnabled && frameCount % 4 === 0) {
+        updateProbes(diver.position);
+      }
       renderer.render(scene, camera);
       fps(dt);
     }
